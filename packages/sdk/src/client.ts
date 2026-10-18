@@ -43,6 +43,7 @@ import {
   parseRetryAfter as parseRetryAfterHeader,
   redactEventPath,
   diagnoseBuyerProof,
+  SENSITIVE_FIELD_PATTERN,
 } from "./errors.js";
 import {
   generateIdempotencyKey,
@@ -545,10 +546,10 @@ export class TalosClient {
    * or structured log sinks never accidentally surface secrets.
    */
   toJSON(): Record<string, unknown> {
-    // Mask Authorization header so the API key is not exposed.
+    // Mask sensitive headers so credential values are not exposed.
     const safeHeaders: Record<string, string> = {};
     for (const [k, v] of Object.entries(this.headers)) {
-      if (k.toLowerCase() === "authorization") {
+      if (SENSITIVE_FIELD_PATTERN.test(k)) {
         safeHeaders[k] = "[REDACTED]";
       } else {
         safeHeaders[k] = v;
@@ -576,6 +577,15 @@ export class TalosClient {
         // `onRetry` is intentionally omitted — it's a function reference.
       },
     };
+  }
+
+  /**
+   * Custom inspect implementation for Node.js `util.inspect`. Returns the
+   * same redacted view as `toJSON()` so that `console.log(client)` never
+   * surfaces credential values.
+   */
+  [Symbol.for("nodejs.util.inspect.custom")](): Record<string, unknown> {
+    return this.toJSON();
   }
 
   /** Resolve the fetch implementation per request. Prefer override; fall back to global. */
