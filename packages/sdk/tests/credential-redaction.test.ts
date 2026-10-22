@@ -7,8 +7,56 @@
  *   - Boundary and negative cases for the query-string scrubber
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { inspect } from "node:util";
 import { TalosClient } from "../src/client.js";
 import { redactEventPath } from "../src/errors.js";
+
+describe("TalosClient serialization – credential header redaction", () => {
+  const credentialHeaders = {
+    Authorization: "Bearer auth-secret",
+    "X-API-Key": "api-key-secret",
+    Cookie: "session=cookie-secret",
+    "X-PAYMENT": "payment-secret",
+    "Idempotency-Key": "idempotency-secret",
+    "X-Signature": "signature-secret",
+    "X-Stellar-Signature": "stellar-signature-secret",
+    "X-Auth-Token": "auth-token-secret",
+  };
+
+  function createClientWithHeaders(): TalosClient {
+    const client = new TalosClient();
+    Object.assign(client, {
+      headers: {
+        "Content-Type": "application/json",
+        "X-Trace-Id": "trace-visible",
+        ...credentialHeaders,
+      },
+    });
+    return client;
+  }
+
+  it("redacts credentials from JSON.stringify while keeping safe headers", () => {
+    const serialized = JSON.stringify(createClientWithHeaders());
+
+    for (const value of Object.values(credentialHeaders)) {
+      expect(serialized).not.toContain(value);
+    }
+    expect(serialized).toContain("trace-visible");
+    expect(serialized).toContain("application/json");
+    expect(serialized).toContain("[REDACTED]");
+  });
+
+  it("redacts credentials from util.inspect while keeping safe headers", () => {
+    const serialized = inspect(createClientWithHeaders());
+
+    for (const value of Object.values(credentialHeaders)) {
+      expect(serialized).not.toContain(value);
+    }
+    expect(serialized).toContain("trace-visible");
+    expect(serialized).toContain("application/json");
+    expect(serialized).toContain("[REDACTED]");
+  });
+});
 
 // ── redactEventPath unit tests ─────────────────────────────────────────────
 

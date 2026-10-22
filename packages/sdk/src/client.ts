@@ -66,6 +66,7 @@ import {
   parseX402Challenge,
   parseRetryAfter as parseRetryAfterHeader,
   redactEventPath,
+  redactSecrets,
   diagnoseBuyerProof,
   type RateLimitInfo,
 } from "./errors.js";
@@ -895,20 +896,12 @@ export class TalosClient {
   }
 
   /**
-   * Privacy-safe JSON representation. Omits credentials (`Authorization`
-   * header, API key) and other internal state so that `JSON.stringify(client)`
-   * or structured log sinks never accidentally surface secrets.
+   * Privacy-safe JSON representation. Redacts credential headers and omits
+   * other internal state so serialization and structured logs do not surface
+   * secrets.
    */
   toJSON(): Record<string, unknown> {
-    // Mask Authorization header so the API key is not exposed.
-    const safeHeaders: Record<string, string> = {};
-    for (const [k, v] of Object.entries(this.headers)) {
-      if (k.toLowerCase() === "authorization") {
-        safeHeaders[k] = "[REDACTED]";
-      } else {
-        safeHeaders[k] = v;
-      }
-    }
+    const safeHeaders = redactSecrets(this.headers) as Record<string, string>;
     return {
       baseUrl: this.baseUrl,
       headers: safeHeaders,
@@ -931,6 +924,10 @@ export class TalosClient {
         // `onRetry` is intentionally omitted — it's a function reference.
       },
     };
+  }
+
+  [Symbol.for("nodejs.util.inspect.custom")](): Record<string, unknown> {
+    return this.toJSON();
   }
 
   /** Resolve the fetch implementation per request. Prefer override; fall back to global. */
